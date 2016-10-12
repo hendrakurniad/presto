@@ -396,7 +396,7 @@ class RelationPlanner
         Optional<Symbol> ordinalitySymbol = node.isWithOrdinality() ? Optional.of(unnestedSymbolsIterator.next()) : Optional.empty();
         checkState(!unnestedSymbolsIterator.hasNext(), "Not all output symbols were matched with input symbols");
 
-        UnnestNode unnestNode = new UnnestNode(idAllocator.getNextId(), projectNode, leftPlan.getOutputSymbols(), unnestSymbols.build(), ordinalitySymbol);
+        UnnestNode unnestNode = new UnnestNode(idAllocator.getNextId(), projectNode, leftPlan.getOutputSymbols(), unnestSymbols.build(), ordinalitySymbol, node.isTableFunction());
         return new RelationPlan(unnestNode, analysis.getScope(joinNode), unnestNode.getOutputSymbols(), Optional.empty());
     }
 
@@ -486,13 +486,11 @@ class RelationPlanner
             values.add(LiteralInterpreter.toExpression(constantValue, type));
             Symbol inputSymbol = symbolAllocator.newSymbol(expression, type);
             argumentSymbols.add(inputSymbol);
-            if (type instanceof ArrayType) {
-                if (((ArrayType) type).getElementType() instanceof RowType) {
-                    unnestSymbols.put(inputSymbol, ((RowType) ((ArrayType) type).getElementType()).getFields().stream().map(f -> unnestedSymbolsIterator.next()).collect(toImmutableList()));
-                }
-                else {
-                    unnestSymbols.put(inputSymbol, ImmutableList.of(unnestedSymbolsIterator.next()));
-                }
+            if (node.isTableFunction()) {
+                unnestSymbols.put(inputSymbol, ((RowType) ((ArrayType) type).getElementType()).getFields().stream().map(f -> unnestedSymbolsIterator.next()).collect(toImmutableList()));
+            }
+            else if (type instanceof ArrayType) {
+                unnestSymbols.put(inputSymbol, ImmutableList.of(unnestedSymbolsIterator.next()));
             }
             else if (type instanceof MapType) {
                 unnestSymbols.put(inputSymbol, ImmutableList.of(unnestedSymbolsIterator.next(), unnestedSymbolsIterator.next()));
@@ -508,7 +506,7 @@ class RelationPlanner
         checkState(!unnestedSymbolsIterator.hasNext(), "Not all output symbols were matched with input symbols");
         ValuesNode valuesNode = new ValuesNode(idAllocator.getNextId(), argumentSymbols.build(), ImmutableList.<List<Expression>>of(values.build()));
 
-        UnnestNode unnestNode = new UnnestNode(idAllocator.getNextId(), valuesNode, ImmutableList.<Symbol>of(), unnestSymbols.build(), ordinalitySymbol);
+        UnnestNode unnestNode = new UnnestNode(idAllocator.getNextId(), valuesNode, ImmutableList.<Symbol>of(), unnestSymbols.build(), ordinalitySymbol, node.isTableFunction());
         return new RelationPlan(unnestNode, scope, unnestedSymbols, Optional.empty());
     }
 

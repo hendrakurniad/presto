@@ -87,6 +87,7 @@ import com.facebook.presto.type.ArrayType;
 import com.facebook.presto.type.MapType;
 import com.facebook.presto.type.RowType;
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
@@ -440,16 +441,16 @@ class StatementAnalyzer
         for (Expression expression : node.getExpressions()) {
             ExpressionAnalysis expressionAnalysis = analyzeExpression(expression, scope);
             Type expressionType = expressionAnalysis.getType(expression);
-            if (expressionType instanceof ArrayType) {
+            if (node.isTableFunction()) {
+                Preconditions.checkArgument(expressionType instanceof ArrayType && ((ArrayType) expressionType).getElementType()instanceof RowType, "table function supports only array of rows");
+                RowType rowType = (RowType) ((ArrayType) expressionType).getElementType();
+                rowType.getFields().forEach(field -> {
+                    outputFields.add(Field.newUnqualified(field.getName(), field.getType()));
+                });
+            }
+            else if (expressionType instanceof ArrayType) {
                 Type elementType = ((ArrayType) expressionType).getElementType();
-                if (elementType instanceof RowType) {
-                    ((RowType) elementType).getFields().forEach(field -> {
-                        outputFields.add(Field.newUnqualified(field.getName(), field.getType()));
-                    });
-                }
-                else {
-                    outputFields.add(Field.newUnqualified(Optional.empty(), elementType));
-                }
+                outputFields.add(Field.newUnqualified(Optional.empty(), elementType));
             }
             else if (expressionType instanceof MapType) {
                 outputFields.add(Field.newUnqualified(Optional.empty(), ((MapType) expressionType).getKeyType()));

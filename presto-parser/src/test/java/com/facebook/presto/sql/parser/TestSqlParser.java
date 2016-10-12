@@ -1333,7 +1333,7 @@ public class TestSqlParser
                         new Join(
                                 Join.Type.CROSS,
                                 new Table(QualifiedName.of("t")),
-                                new Unnest(ImmutableList.of(new QualifiedNameReference(QualifiedName.of("a"))), false),
+                                new Unnest(ImmutableList.of(new QualifiedNameReference(QualifiedName.of("a"))), false, false),
                                 Optional.empty())));
         assertStatement("SELECT * FROM t CROSS JOIN UNNEST(a) WITH ORDINALITY",
                 simpleQuery(
@@ -1341,7 +1341,7 @@ public class TestSqlParser
                         new Join(
                                 Join.Type.CROSS,
                                 new Table(QualifiedName.of("t")),
-                                new Unnest(ImmutableList.of(new QualifiedNameReference(QualifiedName.of("a"))), true),
+                                new Unnest(ImmutableList.of(new QualifiedNameReference(QualifiedName.of("a"))), true, false),
                                 Optional.empty())));
     }
 
@@ -1355,7 +1355,7 @@ public class TestSqlParser
                         new Join(
                                 Join.Type.CROSS,
                                 new Table(QualifiedName.of("t")),
-                                new Unnest(ImmutableList.of(new QualifiedNameReference(QualifiedName.of("a"))), false),
+                                new Unnest(ImmutableList.of(new QualifiedNameReference(QualifiedName.of("a"))), false, true),
                                 Optional.empty())));
     }
 

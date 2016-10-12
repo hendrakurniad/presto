@@ -27,23 +27,25 @@ public final class Unnest
 {
     private final List<Expression> expressions;
     private final boolean withOrdinality;
+    private final boolean tableFunction;
 
-    public Unnest(List<Expression> expressions, boolean withOrdinality)
+    public Unnest(List<Expression> expressions, boolean withOrdinality, boolean tableFunction)
     {
-        this(Optional.empty(), expressions, withOrdinality);
+        this(Optional.empty(), expressions, withOrdinality, tableFunction);
     }
 
-    public Unnest(NodeLocation location, List<Expression> expressions, boolean withOrdinality)
+    public Unnest(NodeLocation location, List<Expression> expressions, boolean withOrdinality, boolean tableFunction)
     {
-        this(Optional.of(location), expressions, withOrdinality);
+        this(Optional.of(location), expressions, withOrdinality, tableFunction);
     }
 
-    private Unnest(Optional<NodeLocation> location, List<Expression> expressions, boolean withOrdinality)
+    private Unnest(Optional<NodeLocation> location, List<Expression> expressions, boolean withOrdinality, boolean tableFunction)
     {
         super(location);
         requireNonNull(expressions, "expressions is null");
         this.expressions = ImmutableList.copyOf(expressions);
         this.withOrdinality = withOrdinality;
+        this.tableFunction = tableFunction;
     }
 
     public List<Expression> getExpressions()
@@ -56,6 +58,11 @@ public final class Unnest
         return withOrdinality;
     }
 
+    public boolean isTableFunction()
+    {
+        return tableFunction;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context)
     {
@@ -65,7 +72,7 @@ public final class Unnest
     @Override
     public String toString()
     {
-        String result = "UNNEST(" + Joiner.on(", ").join(expressions) + ")";
+        String result = (tableFunction ? "TABLE" : "UNNEST") + "(" + Joiner.on(", ").join(expressions) + ")";
         if (withOrdinality) {
             result += " WITH ORDINALITY";
         }

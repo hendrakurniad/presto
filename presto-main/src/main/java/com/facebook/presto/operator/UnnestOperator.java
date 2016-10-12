@@ -44,10 +44,11 @@ public class UnnestOperator
         private final List<Integer> unnestChannels;
         private final List<Type> unnestTypes;
         private final boolean withOrdinality;
+        private final boolean tableFunction;
         private boolean closed;
         private final ImmutableList<Type> types;
 
-        public UnnestOperatorFactory(int operatorId, PlanNodeId planNodeId, List<Integer> replicateChannels, List<Type> replicateTypes, List<Integer> unnestChannels, List<Type> unnestTypes, boolean withOrdinality)
+        public UnnestOperatorFactory(int operatorId, PlanNodeId planNodeId, List<Integer> replicateChannels, List<Type> replicateTypes, List<Integer> unnestChannels, List<Type> unnestTypes, boolean withOrdinality, boolean tableFunction)
         {
             this.operatorId = operatorId;
             this.planNodeId = requireNonNull(planNodeId, "planNodeId is null");
@@ -58,9 +59,10 @@ public class UnnestOperator
             this.unnestTypes = ImmutableList.copyOf(requireNonNull(unnestTypes, "unnestTypes is null"));
             checkArgument(unnestChannels.size() == unnestTypes.size(), "unnestChannels and unnestTypes do not match");
             this.withOrdinality = withOrdinality;
+            this.tableFunction = tableFunction;
             ImmutableList.Builder<Type> typesBuilder = ImmutableList.<Type>builder()
                     .addAll(replicateTypes)
-                    .addAll(getUnnestedTypes(unnestTypes));
+                    .addAll(getUnnestedTypes(unnestTypes, tableFunction));
             if (withOrdinality) {
                 typesBuilder.add(BIGINT);
             }
@@ -78,7 +80,7 @@ public class UnnestOperator
         {
             checkState(!closed, "Factory is already closed");
             OperatorContext operatorContext = driverContext.addOperatorContext(operatorId, planNodeId, UnnestOperator.class.getSimpleName());
-            return new UnnestOperator(operatorContext, replicateChannels, replicateTypes, unnestChannels, unnestTypes, withOrdinality);
+            return new UnnestOperator(operatorContext, replicateChannels, replicateTypes, unnestChannels, unnestTypes, withOrdinality, tableFunction);
         }
 
         @Override
@@ -90,7 +92,7 @@ public class UnnestOperator
         @Override
         public OperatorFactory duplicate()
         {
-            return new UnnestOperatorFactory(operatorId, planNodeId, replicateChannels, replicateTypes, unnestChannels, unnestTypes, withOrdinality);
+            return new UnnestOperatorFactory(operatorId, planNodeId, replicateChannels, replicateTypes, unnestChannels, unnestTypes, withOrdinality, tableFunction);
         }
     }
 
@@ -100,6 +102,7 @@ public class UnnestOperator
     private final List<Integer> unnestChannels;
     private final List<Type> unnestTypes;
     private final boolean withOrdinality;
+    private final boolean tableFunction;
     private final List<Type> outputTypes;
     private final PageBuilder pageBuilder;
     private final List<Unnester> unnesters;
@@ -108,7 +111,7 @@ public class UnnestOperator
     private int currentPosition;
     private int ordinalityCount;
 
-    public UnnestOperator(OperatorContext operatorContext, List<Integer> replicateChannels, List<Type> replicateTypes, List<Integer> unnestChannels, List<Type> unnestTypes, boolean withOrdinality)
+    public UnnestOperator(OperatorContext operatorContext, List<Integer> replicateChannels, List<Type> replicateTypes, List<Integer> unnestChannels, List<Type> unnestTypes, boolean withOrdinality, boolean tableFunction)
     {
         this.operatorContext = requireNonNull(operatorContext, "operatorContext is null");
         this.replicateChannels = ImmutableList.copyOf(requireNonNull(replicateChannels, "replicateChannels is null"));
@@ -116,11 +119,12 @@ public class UnnestOperator
         this.unnestChannels = ImmutableList.copyOf(requireNonNull(unnestChannels, "unnestChannels is null"));
         this.unnestTypes = ImmutableList.copyOf(requireNonNull(unnestTypes, "unnestTypes is null"));
         this.withOrdinality = withOrdinality;
+        this.tableFunction = tableFunction;
         checkArgument(replicateChannels.size() == replicateTypes.size(), "replicate channels or types has wrong size");
         checkArgument(unnestChannels.size() == unnestTypes.size(), "unnest channels or types has wrong size");
         ImmutableList.Builder<Type> outputTypesBuilder = ImmutableList.<Type>builder()
                 .addAll(replicateTypes)
-                .addAll(getUnnestedTypes(unnestTypes));
+                .addAll(getUnnestedTypes(unnestTypes, tableFunction));
         if (withOrdinality) {
             outputTypesBuilder.add(BIGINT);
         }
@@ -129,12 +133,12 @@ public class UnnestOperator
         this.unnesters = new ArrayList<>();
     }
 
-    private static List<Type> getUnnestedTypes(List<Type> types)
+    private static List<Type> getUnnestedTypes(List<Type> types, boolean tableFunction)
     {
         ImmutableList.Builder<Type> builder = ImmutableList.builder();
         for (Type type : types) {
             checkArgument(type instanceof ArrayType || type instanceof MapType || type instanceof RowType, "Can only unnest map, array and row types");
-            if (type instanceof ArrayType && ((ArrayType) type).getElementType() instanceof RowType) {
+            if (tableFunction) {
                 builder.addAll(((ArrayType) type).getElementType().getTypeParameters());
             }
             else {
@@ -197,13 +201,11 @@ public class UnnestOperator
             if (!currentPage.getBlock(channel).isNull(currentPosition)) {
                 block = (Block) type.getObject(currentPage.getBlock(channel), currentPosition);
             }
-            if (type instanceof ArrayType) {
-                if (((ArrayType) type).getElementType() instanceof RowType) {
-                    unnesters.add(new ArrayOfRowsUnnester((ArrayType) type, block));
-                }
-                else {
-                    unnesters.add(new ArrayUnnester((ArrayType) type, block));
-                }
+            if (tableFunction) {
+                unnesters.add(new ArrayOfRowsUnnester((ArrayType) type, block));
+            }
+            else if (type instanceof ArrayType) {
+                unnesters.add(new ArrayUnnester((ArrayType) type, block));
             }
             else if (type instanceof MapType) {
                 unnesters.add(new MapUnnester((MapType) type, block));
